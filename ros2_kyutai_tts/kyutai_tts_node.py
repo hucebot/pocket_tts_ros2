@@ -69,27 +69,28 @@ class KyutaiTTSNode(Node):
         if not msg.data.strip():
             return
 
-        self.get_logger().info(f'Generating audio for: "{msg.data}"')
+        self.get_logger().info(f'Streaming audio for: "{msg.data}"')
 
         try:
-            # Generate the audio tensor [samples]
-            audio_tensor = self.model.generate_audio(self.voice_state, msg.data)
+            # Use Kyutai's streaming generator
+            for chunk_tensor in self.model.generate_audio_stream(self.voice_state, msg.data):
 
-            # Convert float32 tensor (-1.0 to 1.0) to 1.0 signed 16-bit PCM numpy array
-            audio_np = audio_tensor.numpy()
-            audio_int16 = (audio_np * 32767).astype(np.int16)
+                # Convert float32 tensor chunk to 16-bit PCM numpy array
+                audio_np = chunk_tensor.numpy()
+                audio_int16 = (audio_np * 32767).astype(np.int16)
 
-            # Convert to raw bytes
-            raw_audio_bytes = audio_int16.tobytes()
+                # Convert to raw bytes
+                raw_audio_bytes = audio_int16.tobytes()
 
-            # Publish to the audio pipeline
-            audio_msg = AudioData()
-            audio_msg.data = list(raw_audio_bytes)
-            self.audio_pub.publish(audio_msg)
-            self.get_logger().info('Audio successfully published.')
+                # Publish immediately
+                audio_msg = AudioData()
+                audio_msg.data = list(raw_audio_bytes)
+                self.audio_pub.publish(audio_msg)
+
+            self.get_logger().info('Finished publishing audio stream.')
 
         except Exception as e:
-            self.get_logger().error(f'Failed to generate TTS: {str(e)}')
+            self.get_logger().error(f'Failed to stream TTS: {str(e)}')
 
 def main(args=None):
     rclpy.init(args=args)
